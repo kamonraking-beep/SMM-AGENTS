@@ -9,21 +9,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^7.8.0",
-    "@smm-ai/agents": "workspace:*",
-    "@smm-ai/shared": "workspace:*",
-    "cors": "latest",
-    "dotenv": "latest",
-    "express": "latest",
-    "openai": "latest",
-    "prisma": "^7.8.0",
-    "zod": "latest"
+    "@openai/agents": "latest",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/cors": "latest",
-    "@types/express": "latest",
-    "@types/node": "latest",
-    "tsx": "latest",
-    "typescript": "latest"
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
   }
 }

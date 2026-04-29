@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { runSmmWorkflow } from "@smm-ai/agents";
+import { runSmmWorkflow } from "../services/smmAgent.js";
 
 export const agentRouter: Router = Router();
 
@@ -35,12 +35,11 @@ agentRouter.post("/chat", async (req, res) => {
     return res.json({
       ok: true,
       reply: result.reply,
-      savedDraft: result.savedDraft ?? null,
     });
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : "Unknown agent error",
+      error: error instanceof Error ? error.message : "Agent failed",
     });
   }
 });
