@@ -7,3 +7,5 @@ pnpm-lock.yaml
 prisma/dev.db
 coverage
 .DS_Store
+apps/api/.env
+apps/web/.env.local

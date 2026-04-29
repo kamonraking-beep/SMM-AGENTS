@@ -1,46 +1,105 @@
 "use client";
 
-import Script from "next/script";
-import { ChatKit, useChatKit } from "@openai/chatkit-react";
+import { useState } from "react";
+
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export function ChatShell() {
-  const { control } = useChatKit({
-    api: {
-      async getClientSecret(existing) {
-        const endpoint = existing ? "/api/chatkit/session?mode=refresh" : "/api/chatkit/session";
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(existing ? { currentClientSecret: existing } : {}),
-        });
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
-        if (!response.ok) {
-          throw new Error("Failed to create or refresh ChatKit session");
-        }
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || isSending) return;
 
-        const data = (await response.json()) as { client_secret: string };
-        return data.client_secret;
-      },
-    },
-  });
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { role: "user", content: text },
+    ];
+
+    setMessages(nextMessages);
+    setInput("");
+    setIsSending(true);
+
+    try {
+      const response = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: text,
+          history: nextMessages,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Agent request failed");
+      }
+
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: data.reply,
+        },
+      ]);
+    } catch (error) {
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content:
+            error instanceof Error
+              ? `Error: ${error.message}`
+              : "Unknown error",
+        },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  }
 
   return (
-    <section>
-      <Script
-        src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"
-        strategy="afterInteractive"
-      />
-      <div
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 16,
-          background: "white",
-          padding: 12,
-          minHeight: 640,
-          boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-        }}
-      >
-        <ChatKit control={control} className="h-[640px] w-full" />
+    <section className="chat-panel">
+      <div className="chat-messages">
+        {messages.length === 0 ? (
+          <div className="empty-state">
+            Ask me to create, revise, save, or prepare social content.
+          </div>
+        ) : (
+          messages.map((message, index) => (
+            <div key={index} className={`message ${message.role}`}>
+              <strong>{message.role === "user" ? "You" : "Agent"}</strong>
+              <p>{message.content}</p>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="chat-input-row">
+        <textarea
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Create an Instagram post for Studio1Live..."
+          rows={3}
+          disabled={isSending}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void sendMessage();
+            }
+          }}
+        />
+        <button onClick={sendMessage} disabled={isSending || !input.trim()}>
+          {isSending ? "Working..." : "Send"}
+        </button>
       </div>
     </section>
   );

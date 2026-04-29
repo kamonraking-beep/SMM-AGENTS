@@ -1,4 +1,5 @@
 import "./globals.css";
+import Script from "next/script";
 import type { ReactNode } from "react";
 
 export const metadata = {
@@ -9,7 +10,13 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Script
+          src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"
+          strategy="beforeInteractive"
+        />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,11 +1,27 @@
-export const mcpClient = {
-  async queueForPublish(params: { draftId: string; requestedBy: string }) {
-    // Replace this stub with a real MCP or HTTP call to your Jacai server.
-    return {
-      queued: true,
-      draftId: params.draftId,
-      requestedBy: params.requestedBy,
-      provider: process.env.JACAI_MCP_SERVER_LABEL ?? "Jacai_MCP",
-    };
-  },
-};
+type JsonObject = Record<string, unknown>;
+
+const SMM_DRAFT_URL =
+  process.env.SMM_CHAT_DRAFT_URL ??
+  "https://studio1live.com/ashley/smm/szam/social-media-manager/api/chat_draft.php";
+
+export async function postToSmmDraftApi(payload: JsonObject) {
+  const response = await fetch(SMM_DRAFT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`SMM draft API failed: ${response.status} ${text}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: true, raw: text };
+  }
+}

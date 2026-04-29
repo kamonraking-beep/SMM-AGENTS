@@ -9,14 +9,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "latest",
+    "@prisma/client": "^7.8.0",
+    "@smm-ai/agents": "workspace:*",
+    "@smm-ai/shared": "workspace:*",
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
     "openai": "latest",
-    "zod": "latest",
-    "@smm-ai/agents": "workspace:*",
-    "@smm-ai/shared": "workspace:*"
+    "prisma": "^7.8.0",
+    "zod": "latest"
   },
   "devDependencies": {
     "@types/cors": "latest",

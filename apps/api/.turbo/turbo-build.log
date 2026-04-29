@@ -1,0 +1,11 @@
+
+> @smm-ai/api@ build C:\Users\Heru Da Guru\smm-agents\smm-ai-app-starter\smm-ai-app\apps\api
+> tsc -p tsconfig.json
+
+src/routes/chatkit.ts(13,14): error TS2883: The inferred type of 'chatkitRouter' cannot be named without a reference to 'Router' from '.pnpm/@types+express-serve-static-core@5.1.1/node_modules/@types/express-serve-static-core'. This is likely not portable. A type annotation is necessary.
+src/routes/drafts.ts(4,14): error TS2883: The inferred type of 'draftsRouter' cannot be named without a reference to 'Router' from '.pnpm/@types+express-serve-static-core@5.1.1/node_modules/@types/express-serve-static-core'. This is likely not portable. A type annotation is necessary.
+src/routes/drafts.ts(8,26): error TS18047: 'db' is possibly 'null'.
+src/routes/health.ts(3,14): error TS2883: The inferred type of 'healthRouter' cannot be named without a reference to 'Router' from '.pnpm/@types+express-serve-static-core@5.1.1/node_modules/@types/express-serve-static-core'. This is likely not portable. A type annotation is necessary.
+src/routes/publish.ts(12,14): error TS2883: The inferred type of 'publishRouter' cannot be named without a reference to 'Router' from '.pnpm/@types+express-serve-static-core@5.1.1/node_modules/@types/express-serve-static-core'. This is likely not portable. A type annotation is necessary.
+src/server.ts(8,17): error TS2883: The inferred type of 'createServer' cannot be named without a reference to 'Express' from '.pnpm/@types+express-serve-static-core@5.1.1/node_modules/@types/express-serve-static-core'. This is likely not portable. A type annotation is necessary.
+ ELIFECYCLE  Command failed with exit code 1.
