@@ -2,6 +2,27 @@ import { Agent, run, tool } from "@openai/agents";
 import { z } from "zod";
 import { saveContentDraft } from "../mcp/tools.js";
 
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      body: data,
+    };
+  }
+
+  return data;
+}
+
 const saveDraftTool = tool({
   name: "save_content_draft",
   description: "Save completed social media content into the SMM draft system.",
@@ -19,33 +40,71 @@ const saveDraftTool = tool({
   },
 });
 
-const getDraftsTool = tool({
-  name: "get_drafts",
-  description: "Fetch all drafts from SMM system",
-  parameters: z.object({}),
-  async execute() {
-    const res = await fetch("http://localhost:4000/drafts");
-    const data = await res.json();
-    return data;
+const getDraftDetailsTool = tool({
+  name: "get_draft_details",
+  description: "Get full details of a draft by ID.",
+  parameters: z.object({
+    draftId: z.string(),
+  }),
+  async execute(input) {
+    const response = await fetch(process.env.SMM_GET_DRAFT_DETAILS_URL!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        draft_id: input.draftId,
+      }),
+    });
+
+    return readJsonResponse(response);
+  },
+});
+
+const queueForPublishTool = tool({
+  name: "queue_for_publish",
+  description: "Approve and queue a draft for publishing.",
+  parameters: z.object({
+    draftId: z.string(),
+    channel: z.string().default("facebook"),
+  }),
+  async execute(input) {
+    const response = await fetch(process.env.SMM_QUEUE_FOR_PUBLISH_URL!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        draft_id: input.draftId,
+        approval_status: "approved",
+        publish_target: "static_site",
+        channel: input.channel,
+      }),
+    });
+
+    return readJsonResponse(response);
   },
 });
 
 const publishTool = tool({
   name: "publish_content",
-  description: "Publish a draft by ID",
+  description: "Publish a queued or approved draft to the live site.",
   parameters: z.object({
     draftId: z.string(),
   }),
   async execute(input) {
-    const res = await fetch("http://localhost:4000/publish", {
+    const response = await fetch(process.env.SMM_PUBLISH_TO_STATIC_SITE_URL!, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ draftId: input.draftId }),
+      body: JSON.stringify({
+        draft_id: input.draftId,
+        publish_now: true,
+      }),
     });
 
-    return await res.json();
+    return readJsonResponse(response);
   },
 });
 
@@ -64,19 +123,31 @@ Defaults:
 - Tone: energetic and professional
 - CTA: DM to book
 
-You can manage drafts using tools:
+Draft Management Rules:
+- When you create a final draft, call save_content_draft.
+- Use get_draft_details when the user references a draft ID.
+- Use queue_for_publish before publishing.
+- Use publish_content only after confirmation.
+- Always confirm the draft ID before publishing.
+- Never fake draft data or tool results.
+- Always return real system response details when available.
 
-- Use get_drafts when user asks to see drafts
-- Use publish_content when user wants to publish
-- Always confirm actions with real data (draft id, status)
+Important:
+- There is not currently a list-drafts tool.
+- If the user asks to show latest drafts, ask for a draft ID or explain that only draft details by ID are available right now.
 
-Never fake confirmations.
-
-When you create a final draft, call save_content_draft.
-Do not show JSON.
-Do not mention tool calls unless asked.
+Behavior:
+- Do not show JSON.
+- Do not mention tool calls unless asked.
+- Keep responses direct and useful.
+- Ask only essential questions.
 `,
-  tools: [saveDraftTool, getDraftsTool, publishTool],
+  tools: [
+    saveDraftTool,
+    getDraftDetailsTool,
+    queueForPublishTool,
+    publishTool,
+  ],
 });
 
 export async function runSmmWorkflow(input: {
