@@ -1,0 +1,14 @@
+{
+  "name": "@smm-ai/db",
+  "private": true,
+  "scripts": {
+    "prisma": "prisma",
+    "typecheck": "echo ok"
+  },
+  "dependencies": {
+    "@prisma/client": "latest"
+  },
+  "devDependencies": {
+    "prisma": "latest"
+  }
+}

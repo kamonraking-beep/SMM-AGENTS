@@ -1,0 +1,17 @@
+{
+  "name": "smm-ai-app",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter @smm-ai/db prisma generate",
+    "db:migrate": "pnpm --filter @smm-ai/db prisma migrate dev"
+  },
+  "devDependencies": {
+    "turbo": "latest",
+    "typescript": "latest"
+  }
+}
