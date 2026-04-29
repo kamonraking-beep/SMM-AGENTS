@@ -3,22 +3,41 @@ import { z } from "zod";
 
 export const publishRouter: Router = Router();
 
-const publishSchema = z.object({
-  draftId: z.string().min(1),
-  approvedBy: z.string().min(1),
+const schema = z.object({
+  draftId: z.string(),
 });
 
 publishRouter.post("/", async (req, res) => {
-  const parsed = publishSchema.safeParse(req.body);
+  const parsed = schema.safeParse(req.body);
 
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return res.status(400).json({
+      ok: false,
+      error: parsed.error.flatten(),
+    });
   }
 
-  return res.json({
-    ok: true,
-    queued: false,
-    message: "Publish route is connected, but live publishing is not wired yet.",
-    draftId: parsed.data.draftId,
-  });
+  try {
+    const response = await fetch(process.env.SMM_PUBLISH_URL!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        draftId: parsed.data.draftId,
+      }),
+    });
+
+    const data = await response.json();
+
+    return res.json({
+      ok: true,
+      result: data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Publish failed",
+    });
+  }
 });

@@ -26,7 +26,7 @@ export function ChatShell() {
     setIsSending(true);
 
     try {
-      const response = await fetch("/api/agent/chat", {
+      const response = await fetch("https://smm-agents.onrender.com/agent/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
