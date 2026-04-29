@@ -13,11 +13,7 @@ async function readJsonResponse(response: Response) {
   }
 
   if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      body: data,
-    };
+    return { ok: false, status: response.status, body: data };
   }
 
   return data;
@@ -37,20 +33,20 @@ const saveDraftTool = tool({
   parameters: z.object({
     title: z.string(),
     content: z.string(),
-    platform: z.string().default("instagram"),
-    contentType: z.string().default("static_post"),
-    cta: z.string().default("DM to book"),
-    hashtags: z.array(z.string()).default([]),
+    platform: z.string(),
+    contentType: z.string(),
+    cta: z.string(),
+    hashtags: z.array(z.string()),
   }),
   async execute(input) {
     return saveContentDraft({
       title: input.title,
       content: input.content,
-      platform: input.platform,
+      platform: input.platform || "instagram",
       metadata: {
-        content_type: input.contentType,
-        cta: input.cta,
-        hashtags: input.hashtags,
+        content_type: input.contentType || "static_post",
+        cta: input.cta || "DM to book",
+        hashtags: input.hashtags || [],
       },
     });
   },
@@ -60,31 +56,20 @@ const listDraftsTool = tool({
   name: "list_drafts",
   description: "List recent SMM drafts/articles.",
   parameters: z.object({
-    limit: z.number().int().min(1).max(50).default(10),
+    limit: z.number(),
   }),
   async execute(input) {
     const url = new URL(requiredEnv("SMM_CRUD_URL"));
     url.searchParams.set("action", "list_articles");
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-    });
-
+    const response = await fetch(url.toString(), { method: "GET" });
     const data = await readJsonResponse(response);
 
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      "ok" in data &&
-      "items" in data
-    ) {
-      const items = Array.isArray((data as { items?: unknown }).items)
-        ? ((data as { items: unknown[] }).items).slice(0, input.limit)
-        : [];
-
+    const maybeItems = (data as { items?: unknown }).items;
+    if (Array.isArray(maybeItems)) {
       return {
         ...(data as Record<string, unknown>),
-        items,
+        items: maybeItems.slice(0, input.limit || 10),
       };
     }
 
@@ -94,23 +79,15 @@ const listDraftsTool = tool({
 
 const getDraftDetailsTool = tool({
   name: "get_draft_details",
-  description: "Get full details of a draft by ID, slug, or title.",
+  description: "Get full details of a draft by ID.",
   parameters: z.object({
-    draftId: z.string().optional(),
-    slug: z.string().optional(),
-    title: z.string().optional(),
+    draftId: z.string(),
   }),
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_GET_DRAFT_DETAILS_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        draft_id: input.draftId,
-        slug: input.slug,
-        title: input.title,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft_id: input.draftId }),
     });
 
     return readJsonResponse(response);
@@ -122,22 +99,20 @@ const queueForPublishTool = tool({
   description: "Approve and queue a draft for publishing.",
   parameters: z.object({
     draftId: z.string(),
-    channel: z.string().default("facebook"),
-    publishTarget: z.string().default("static_site"),
-    publishAt: z.string().optional(),
+    channel: z.string(),
+    publishTarget: z.string(),
+    publishAt: z.string(),
   }),
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_QUEUE_FOR_PUBLISH_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         draft_id: input.draftId,
         approval_status: "approved",
-        publish_target: input.publishTarget,
-        channel: input.channel,
-        publish_at: input.publishAt,
+        publish_target: input.publishTarget || "static_site",
+        channel: input.channel || "facebook",
+        publish_at: input.publishAt || undefined,
       }),
     });
 
@@ -154,13 +129,8 @@ const publishTool = tool({
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_PUBLISH_TO_STATIC_SITE_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        draft_id: input.draftId,
-        publish_now: true,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft_id: input.draftId, publish_now: true }),
     });
 
     return readJsonResponse(response);
@@ -171,26 +141,24 @@ const generateVisualBriefTool = tool({
   name: "generate_visual_brief",
   description: "Generate image/video creative prompts for a draft or content topic.",
   parameters: z.object({
-    platform: z.string().default("social"),
-    brandProfile: z.string().default("Studio1Live"),
-    postGoal: z.string().default("engagement"),
+    platform: z.string(),
+    brandProfile: z.string(),
+    postGoal: z.string(),
     captionOrTopic: z.string(),
-    visualStyle: z.string().default("clean, modern, energetic, studio-quality"),
-    assetMode: z.enum(["image", "video", "both"]).default("both"),
+    visualStyle: z.string(),
+    assetMode: z.string(),
   }),
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_GENERATE_VISUAL_BRIEF_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        platform: input.platform,
-        brand_profile: input.brandProfile,
-        post_goal: input.postGoal,
+        platform: input.platform || "social",
+        brand_profile: input.brandProfile || "Studio1Live",
+        post_goal: input.postGoal || "engagement",
         caption_or_topic: input.captionOrTopic,
-        visual_style: input.visualStyle,
-        asset_mode: input.assetMode,
+        visual_style: input.visualStyle || "clean, modern, energetic, studio-quality",
+        asset_mode: input.assetMode || "both",
       }),
     });
 
@@ -203,33 +171,31 @@ const attachAssetToDraftTool = tool({
   description: "Attach asset URLs, featured image/video, or prompts to a draft.",
   parameters: z.object({
     draftId: z.string(),
-    featuredImage: z.string().optional(),
-    featuredVideo: z.string().optional(),
-    imagePrompt: z.string().optional(),
-    videoBrief: z.string().optional(),
-    imageAssets: z.array(z.string()).default([]),
-    videoAssets: z.array(z.string()).default([]),
-    assetUrls: z.array(z.string()).default([]),
-    assetLabel: z.string().optional(),
-    assetType: z.string().optional(),
+    featuredImage: z.string(),
+    featuredVideo: z.string(),
+    imagePrompt: z.string(),
+    videoBrief: z.string(),
+    imageAssets: z.array(z.string()),
+    videoAssets: z.array(z.string()),
+    assetUrls: z.array(z.string()),
+    assetLabel: z.string(),
+    assetType: z.string(),
   }),
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_ATTACH_ASSET_TO_DRAFT_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         draft_id: input.draftId,
-        featured_image: input.featuredImage,
-        featured_video: input.featuredVideo,
-        image_prompt: input.imagePrompt,
-        video_brief: input.videoBrief,
-        image_assets: input.imageAssets,
-        video_assets: input.videoAssets,
-        asset_urls: input.assetUrls,
-        asset_label: input.assetLabel,
-        asset_type: input.assetType,
+        featured_image: input.featuredImage || undefined,
+        featured_video: input.featuredVideo || undefined,
+        image_prompt: input.imagePrompt || undefined,
+        video_brief: input.videoBrief || undefined,
+        image_assets: input.imageAssets || [],
+        video_assets: input.videoAssets || [],
+        asset_urls: input.assetUrls || [],
+        asset_label: input.assetLabel || undefined,
+        asset_type: input.assetType || undefined,
         updated_by: "smm_agent",
       }),
     });
@@ -243,23 +209,21 @@ const generateVideoAssetTool = tool({
   description: "Generate a video asset brief/record for a draft or campaign.",
   parameters: z.object({
     prompt: z.string(),
-    style: z.string().default("modern social media promo"),
-    durationSeconds: z.number().int().min(3).max(120).default(15),
-    aspectRatio: z.string().default("9:16"),
-    draftId: z.string().optional(),
+    style: z.string(),
+    durationSeconds: z.number(),
+    aspectRatio: z.string(),
+    draftId: z.string(),
   }),
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_GENERATE_VIDEO_ASSET_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: input.prompt,
-        style: input.style,
-        duration_seconds: input.durationSeconds,
-        aspect_ratio: input.aspectRatio,
-        draft_id: input.draftId,
+        style: input.style || "modern social media promo",
+        duration_seconds: input.durationSeconds || 15,
+        aspect_ratio: input.aspectRatio || "9:16",
+        draft_id: input.draftId || undefined,
       }),
     });
 
@@ -272,7 +236,7 @@ const generateSharepackTool = tool({
   description: "Generate multi-platform share copy from an article/draft ID.",
   parameters: z.object({
     articleId: z.string(),
-    platforms: z.array(z.string()).default(["facebook", "x", "linkedin"]),
+    platforms: z.array(z.string()),
   }),
   async execute(input) {
     const url = new URL(requiredEnv("SMM_SHAREPACKS_URL"));
@@ -280,12 +244,10 @@ const generateSharepackTool = tool({
 
     const response = await fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         article_id: input.articleId,
-        platforms: input.platforms,
+        platforms: input.platforms || ["facebook", "x", "linkedin"],
       }),
     });
 
@@ -297,17 +259,14 @@ const listSharepacksTool = tool({
   name: "list_sharepacks",
   description: "List sharepacks by status.",
   parameters: z.object({
-    status: z.string().default("due"),
+    status: z.string(),
   }),
   async execute(input) {
     const url = new URL(requiredEnv("SMM_SHAREPACKS_URL"));
     url.searchParams.set("action", "list");
-    url.searchParams.set("status", input.status);
+    url.searchParams.set("status", input.status || "due");
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-    });
-
+    const response = await fetch(url.toString(), { method: "GET" });
     return readJsonResponse(response);
   },
 });
@@ -324,12 +283,8 @@ const markSharepackDoneTool = tool({
 
     const response = await fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: input.id,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: input.id }),
     });
 
     return readJsonResponse(response);
@@ -345,12 +300,8 @@ const tagxTool = tool({
   async execute(input) {
     const response = await fetch(requiredEnv("SMM_TAGX_RUN_URL"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        article_id: input.articleId,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ article_id: input.articleId }),
     });
 
     return readJsonResponse(response);
@@ -369,12 +320,8 @@ const zapierWebhookTool = tool({
 
     const response = await fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: input.id,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: input.id }),
     });
 
     return readJsonResponse(response);
@@ -392,10 +339,7 @@ const listMediaTool = tool({
     url.searchParams.set("action", "list_by_article");
     url.searchParams.set("article_id", input.articleId);
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-    });
-
+    const response = await fetch(url.toString(), { method: "GET" });
     return readJsonResponse(response);
   },
 });
@@ -406,7 +350,7 @@ const generateImageTool = tool({
   parameters: z.object({
     articleId: z.string(),
     prompt: z.string(),
-    toolName: z.string().default("openai_image"),
+    toolName: z.string(),
   }),
   async execute(input) {
     const url = new URL(requiredEnv("SMM_MEDIA_URL"));
@@ -414,13 +358,11 @@ const generateImageTool = tool({
 
     const response = await fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         article_id: input.articleId,
         prompt: input.prompt,
-        tool_name: input.toolName,
+        tool_name: input.toolName || "openai_image",
       }),
     });
 
@@ -433,6 +375,8 @@ const smmAgent = new Agent({
   model: "gpt-5.4",
   instructions: `
 You are the production social media manager and publishing operator for Studio1Live.
+
+When using tools, always provide every field in the schema. Use empty strings, empty arrays, or sensible defaults for unknown optional values.
 
 Core goals:
 - Create strong captions, hooks, CTAs, hashtags, video concepts, campaign copy, and publish-ready content.
@@ -450,7 +394,7 @@ Defaults:
 Draft rules:
 - When creating a final content draft, call save_content_draft.
 - Use list_drafts when the user asks for latest drafts or recent drafts.
-- Use get_draft_details when the user references a draft ID, slug, or title.
+- Use get_draft_details only when the user provides a draft ID.
 - Use queue_for_publish before publish_content.
 - Use publish_content only after user confirms publishing.
 - Always confirm the draft ID before publishing.

@@ -1,0 +1,737 @@
+(() => {
+  const FREE_FILE_LIMIT = 1;
+  const FREE_SESSION_LIMIT = 1;
+  const LIBRARY_KEY = 'ss_library_items';
+  const SESSIONS_KEY = 'ss_saved_sessions';
+
+  const state = {
+    mode: 'sleep',
+    duration: 28800,
+    remaining: 28800,
+    timerId: null,
+    isPaused: false,
+    customAudioUrl: null,
+    selectedLibraryFile: null,
+    chosenDocumentFile: null,
+    deferredPrompt: null,
+  };
+
+  const els = {
+    startSessionBtn: document.getElementById('startSessionBtn'),
+    pauseSessionBtn: document.getElementById('pauseSessionBtn'),
+    resetSessionBtn: document.getElementById('resetSessionBtn'),
+    toggleModeBtn: document.getElementById('toggleModeBtn'),
+    playRainBtn: document.getElementById('playRainBtn'),
+    playAlarmBtn: document.getElementById('playAlarmBtn'),
+    readTextBtn: document.getElementById('readTextBtn'),
+    stopReadBtn: document.getElementById('stopReadBtn'),
+    saveSessionBtn: document.getElementById('saveSessionBtn'),
+    installBtn: document.getElementById('installBtn'),
+    openPaywallBtn: document.getElementById('openPaywallBtn'),
+
+    sessionPreset: document.getElementById('sessionPreset'),
+    studyMinutes: document.getElementById('studyMinutes'),
+    breakMinutes: document.getElementById('breakMinutes'),
+    studyText: document.getElementById('studyText'),
+    voiceSelect: document.getElementById('voiceSelect'),
+
+    documentUpload: document.getElementById('documentUpload'),
+    parseFileBtn: document.getElementById('parseFileBtn'),
+    documentFileName: document.getElementById('documentFileName'),
+
+    audioUpload: document.getElementById('audioUpload'),
+    audioFileName: document.getElementById('audioFileName'),
+    libraryCategory: document.getElementById('libraryCategory'),
+    libraryNotes: document.getElementById('libraryNotes'),
+    libraryManager: document.getElementById('libraryManager'),
+    playFileBtn: document.getElementById('playFileBtn'),
+    stopMediaBtn: document.getElementById('stopMediaBtn'),
+
+    savedSessions: document.getElementById('savedSessions'),
+
+    timerDisplay: document.getElementById('timerDisplay'),
+    statusText: document.getElementById('statusText'),
+    timerRing: document.getElementById('timerRing'),
+    modeTitle: document.getElementById('modeTitle'),
+    modeBadge: document.getElementById('modeBadge'),
+    studyStat: document.getElementById('studyStat'),
+    breakStat: document.getElementById('breakStat'),
+    libraryCountStat: document.getElementById('libraryCountStat'),
+    premiumState: document.getElementById('premiumState'),
+    limitsText: document.getElementById('limitsText'),
+
+    rainAudio: document.getElementById('rainAudio'),
+    chimeAudio: document.getElementById('chimeAudio'),
+  };
+
+  function setStatus(message) {
+    if (els.statusText) els.statusText.textContent = message;
+  }
+
+  function pad(n) {
+    return String(Math.max(0, n)).padStart(2, '0');
+  }
+
+  function formatTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  function isPremium() {
+    return !!window.Paywall?.isPremium?.();
+  }
+
+  function getFileLimit() {
+    return isPremium() ? 999 : FREE_FILE_LIMIT;
+  }
+
+  function getSessionLimit() {
+    return isPremium() ? 999 : FREE_SESSION_LIMIT;
+  }
+
+  function updateLimitsUI() {
+    const premium = isPremium();
+
+    if (els.premiumState) {
+      els.premiumState.textContent = premium ? 'Premium' : 'Free';
+      els.premiumState.classList.toggle('premium', premium);
+    }
+
+    if (els.limitsText) {
+      els.limitsText.textContent = premium
+        ? 'Limits removed: install, multi-file library, multi-session save'
+        : 'Limits: 1 file, 1 saved session';
+    }
+  }
+
+  function updateStats() {
+    if (els.studyStat) els.studyStat.textContent = `${Number(els.studyMinutes?.value || 55)} min`;
+    if (els.breakStat) els.breakStat.textContent = `${Number(els.breakMinutes?.value || 5)} min`;
+    updateLibraryStat();
+  }
+
+  function updateTimerUI() {
+    if (els.timerDisplay) els.timerDisplay.textContent = formatTime(state.remaining);
+
+    const ratio = state.duration > 0 ? state.remaining / state.duration : 0;
+    const progress = Math.max(0, Math.min(100, ratio * 100));
+
+    if (els.timerRing) {
+      els.timerRing.style.background =
+        `conic-gradient(var(--accent) 0 ${progress}%, rgba(255,255,255,0.08) ${progress}% 100%)`;
+    }
+  }
+
+  function applyModeUI() {
+    const sleep = state.mode === 'sleep';
+
+    if (els.modeTitle) els.modeTitle.textContent = sleep ? 'Sleep Mode' : 'Awake Mode';
+    if (els.modeBadge) els.modeBadge.textContent = sleep ? 'Sleep' : 'Awake';
+    if (els.toggleModeBtn) {
+      els.toggleModeBtn.textContent = sleep ? 'Switch to Awake Mode' : 'Switch to Sleep Mode';
+    }
+  }
+
+  function stopTimer() {
+    if (state.timerId) {
+      clearInterval(state.timerId);
+      state.timerId = null;
+    }
+  }
+
+  function resetTimer() {
+    stopTimer();
+    state.isPaused = false;
+    state.duration = Number(els.sessionPreset?.value || 28800);
+    state.remaining = state.duration;
+    updateTimerUI();
+    updateStats();
+
+    if (els.pauseSessionBtn) els.pauseSessionBtn.textContent = 'Pause';
+    setStatus('Session reset');
+  }
+
+  function completeSession() {
+    stopTimer();
+    state.isPaused = false;
+    stopMediaPlayback();
+
+    try {
+      if (els.chimeAudio) {
+        els.chimeAudio.pause();
+        els.chimeAudio.currentTime = 0;
+        els.chimeAudio.volume = 1.0;
+        els.chimeAudio.muted = false;
+        els.chimeAudio.play();
+      }
+    } catch (e) {}
+
+    if (els.pauseSessionBtn) els.pauseSessionBtn.textContent = 'Pause';
+    setStatus('Session complete. Media stopped. Alarm played.');
+  }
+
+  function startTimer() {
+    stopTimer();
+    state.isPaused = false;
+
+    if (state.remaining <= 0) {
+      resetTimer();
+    }
+
+    if (els.pauseSessionBtn) els.pauseSessionBtn.textContent = 'Pause';
+    setStatus(state.mode === 'sleep' ? 'Session running in sleep mode' : 'Session running in awake mode');
+
+    state.timerId = setInterval(() => {
+      if (state.remaining <= 0) {
+        completeSession();
+        return;
+      }
+
+      state.remaining -= 1;
+      updateTimerUI();
+
+      if (state.remaining <= 0) {
+        completeSession();
+      }
+    }, 1000);
+  }
+
+  function pauseOrResumeTimer() {
+    if (state.timerId) {
+      stopTimer();
+      state.isPaused = true;
+      if (els.pauseSessionBtn) els.pauseSessionBtn.textContent = 'Resume';
+      setStatus('Session paused');
+      return;
+    }
+
+    if (state.isPaused) {
+      startTimer();
+    }
+  }
+
+  function toggleMode() {
+    state.mode = state.mode === 'sleep' ? 'awake' : 'sleep';
+    applyModeUI();
+    setStatus(state.mode === 'sleep' ? 'Sleep mode ready' : 'Awake mode ready');
+  }
+
+  function populateVoices() {
+    if (!('speechSynthesis' in window) || !els.voiceSelect) return;
+
+    const voices = window.speechSynthesis.getVoices();
+    els.voiceSelect.innerHTML = '';
+
+    if (!voices.length) {
+      const option = document.createElement('option');
+      option.textContent = 'Default device voice';
+      els.voiceSelect.appendChild(option);
+      return;
+    }
+
+    voices.forEach((voice, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = `${voice.name} (${voice.lang})`;
+      els.voiceSelect.appendChild(option);
+    });
+  }
+
+  function speakText() {
+    const text = (els.studyText?.value || '').trim();
+    if (!text) {
+      setStatus('Add some study text first');
+      return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+      setStatus('Speech synthesis not supported in this browser.');
+      return;
+    }
+
+    if (!state.timerId && !state.isPaused && state.remaining === state.duration) {
+      startTimer();
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const selectedIndex = Number(els.voiceSelect?.value || 0);
+
+    if (voices[selectedIndex]) utterance.voice = voices[selectedIndex];
+    utterance.rate = state.mode === 'sleep' ? 0.88 : 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => setStatus('Reading study text');
+    utterance.onend = () => setStatus('Reading finished');
+    utterance.onerror = () => setStatus('Reading failed');
+
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      setStatus('Could not start reading');
+    }
+  }
+
+  function stopReading() {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setStatus('Reading stopped');
+    }
+  }
+
+  function stopMediaPlayback() {
+    if (els.rainAudio) {
+      els.rainAudio.pause();
+      try { els.rainAudio.currentTime = 0; } catch (e) {}
+    }
+    if (els.playRainBtn) els.playRainBtn.textContent = 'Play Rain';
+  }
+
+  function toggleRain() {
+    if (!els.rainAudio) {
+      setStatus('Rain audio not found');
+      return;
+    }
+
+    if (els.rainAudio.paused) {
+      const promise = els.rainAudio.play();
+      if (promise && typeof promise.then === 'function') {
+        promise.then(() => {
+          if (els.playRainBtn) els.playRainBtn.textContent = 'Pause Rain';
+          setStatus('Rain audio playing');
+        }).catch(() => {
+          setStatus('Tap again to allow audio playback');
+        });
+      }
+    } else {
+      els.rainAudio.pause();
+      if (els.playRainBtn) els.playRainBtn.textContent = 'Play Rain';
+      setStatus('Rain audio paused');
+    }
+  }
+
+  function testAlarm() {
+    try {
+      if (els.chimeAudio) {
+        els.chimeAudio.pause();
+        els.chimeAudio.currentTime = 0;
+        els.chimeAudio.volume = 1.0;
+        els.chimeAudio.muted = false;
+        els.chimeAudio.play();
+      }
+      setStatus('Alarm test played');
+    } catch (e) {
+      setStatus('Alarm playback blocked until user interaction');
+    }
+  }
+
+  function getLibraryItems() {
+    try {
+      return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function setLibraryItems(items) {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(items));
+  }
+
+  function updateLibraryStat() {
+    const count = getLibraryItems().length;
+    if (els.libraryCountStat) {
+      els.libraryCountStat.textContent = `${count} file${count === 1 ? '' : 's'}`;
+    }
+  }
+
+  function renderLibrary() {
+    if (!els.libraryManager) return;
+
+    const items = getLibraryItems();
+    els.libraryManager.innerHTML = '';
+
+    if (!items.length) {
+      els.libraryManager.innerHTML = '<div class="saved-empty">No library items yet.</div>';
+      updateLibraryStat();
+      return;
+    }
+
+    items.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = 'library-item';
+
+      if (state.selectedLibraryFile && item.url === state.selectedLibraryFile) {
+        div.classList.add('selected');
+      }
+
+      div.innerHTML = `
+        <strong>${item.name || 'Untitled file'}</strong>
+        <span>${item.category || 'Uncategorized'} • ${item.type || 'file'}</span>
+        <small>${item.notes || 'Tap to select this file for playback.'}</small>
+      `;
+
+      div.addEventListener('click', () => {
+        document.querySelectorAll('.library-item').forEach((el) => el.classList.remove('selected'));
+        div.classList.add('selected');
+        state.selectedLibraryFile = item.url || null;
+        setStatus(item.url ? 'File selected' : 'This item no longer has a playable local URL.');
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'control-row';
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-ghost';
+      deleteBtn.type = 'button';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        deleteLibraryItem(index);
+      });
+
+      actions.appendChild(deleteBtn);
+      div.appendChild(actions);
+      els.libraryManager.appendChild(div);
+    });
+
+    updateLibraryStat();
+  }
+
+  function deleteLibraryItem(index) {
+    const items = getLibraryItems();
+    if (index < 0 || index >= items.length) return;
+
+    const item = items[index];
+    if (item?.url && state.selectedLibraryFile === item.url) {
+      state.selectedLibraryFile = null;
+      stopMediaPlayback();
+    }
+
+    items.splice(index, 1);
+    setLibraryItems(items);
+    renderLibrary();
+    setStatus('Library item deleted');
+  }
+
+  function handleAudioUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const items = getLibraryItems();
+    if (items.length >= getFileLimit()) {
+      window.Paywall?.open?.();
+      setStatus('Free mode allows only 1 uploaded file.');
+      event.target.value = '';
+      return;
+    }
+
+    if (state.customAudioUrl) {
+      try {
+        URL.revokeObjectURL(state.customAudioUrl);
+      } catch (e) {}
+    }
+
+    state.customAudioUrl = URL.createObjectURL(file);
+    state.selectedLibraryFile = state.customAudioUrl;
+
+    if (file.type && file.type.startsWith('audio/')) {
+      if (els.rainAudio) els.rainAudio.src = state.customAudioUrl;
+    }
+
+    if (els.audioFileName) els.audioFileName.textContent = file.name;
+
+    items.push({
+      name: file.name,
+      type: file.type || 'file',
+      category: els.libraryCategory?.value || 'Custom',
+      notes: (els.libraryNotes?.value || '').trim(),
+      url: state.customAudioUrl,
+    });
+
+    setLibraryItems(items);
+    renderLibrary();
+    setStatus('Library item added and selected');
+
+    if (els.libraryNotes) els.libraryNotes.value = '';
+  }
+
+  function playSelectedFile() {
+    if (!state.selectedLibraryFile) {
+      setStatus('Select a file first');
+      return;
+    }
+
+    const items = getLibraryItems();
+    const selectedItem = items.find((item) => item.url === state.selectedLibraryFile);
+
+    if (!selectedItem) {
+      setStatus('Selected file not found');
+      return;
+    }
+
+    if (!els.rainAudio) {
+      setStatus('Audio player not found');
+      return;
+    }
+
+    els.rainAudio.src = selectedItem.url;
+    els.rainAudio.load();
+
+    const promise = els.rainAudio.play();
+    if (promise && typeof promise.then === 'function') {
+      promise.then(() => {
+        if (els.playRainBtn) els.playRainBtn.textContent = 'Pause Rain';
+        setStatus('Playing selected file');
+      }).catch(() => {
+        setStatus('Tap again to allow playback');
+      });
+    }
+  }
+
+  function sanitizeExtractedText(text) {
+    return String(text || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[\t\r]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/ {2,}/g, ' ')
+      .trim();
+  }
+
+  function handleDocumentSelect(event) {
+    const file = event.target.files?.[0];
+    state.chosenDocumentFile = file || null;
+
+    if (els.documentFileName) {
+      els.documentFileName.textContent = file ? file.name : 'No study file selected';
+    }
+
+    if (file) setStatus('Study file selected');
+  }
+
+  function parseChosenFileToStudyText() {
+    const file = state.chosenDocumentFile;
+    if (!file) {
+      setStatus('Choose a study file first');
+      return;
+    }
+
+    const lower = file.name.toLowerCase();
+    const supported = ['.txt', '.md', '.html', '.htm', '.json', '.csv', '.xml', '.js', '.css'];
+    const isSupported = supported.some((ext) => lower.endsWith(ext));
+
+    if (!isSupported) {
+      setStatus('This parser build supports txt, md, html, json, csv, xml, js, and css files.');
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const cleaned = sanitizeExtractedText(String(reader.result || ''));
+      if (els.studyText) els.studyText.value = cleaned;
+      setStatus('Parsed file loaded into Study Text');
+    };
+
+    reader.onerror = () => {
+      setStatus('Could not parse that file');
+    };
+
+    reader.readAsText(file);
+  }
+
+  function getSavedSessions() {
+    try {
+      return JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function setSavedSessions(sessions) {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  }
+
+  function renderSavedSessions() {
+    if (!els.savedSessions) return;
+
+    const sessions = getSavedSessions();
+    els.savedSessions.innerHTML = '';
+
+    if (!sessions.length) {
+      els.savedSessions.innerHTML = '<div class="saved-empty">No sessions saved yet.</div>';
+      return;
+    }
+
+    sessions.forEach((session, index) => {
+      const card = document.createElement('div');
+      card.className = 'saved-item';
+      card.innerHTML = `
+        <strong>${session.name}</strong>
+        <span>${session.mode} • ${session.totalLabel} • ${session.study} / ${session.breakMin}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'control-row';
+
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'btn btn-secondary';
+      loadBtn.type = 'button';
+      loadBtn.textContent = 'Load';
+      loadBtn.addEventListener('click', () => loadSession(index));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-ghost';
+      deleteBtn.type = 'button';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => deleteSession(index));
+
+      actions.appendChild(loadBtn);
+      actions.appendChild(deleteBtn);
+      card.appendChild(actions);
+      els.savedSessions.appendChild(card);
+    });
+  }
+
+  function loadSession(index) {
+    const sessions = getSavedSessions();
+    const session = sessions[index];
+    if (!session) return;
+
+    if (els.sessionPreset) els.sessionPreset.value = String(session.totalSeconds);
+    if (els.studyMinutes) els.studyMinutes.value = String(session.study);
+    if (els.breakMinutes) els.breakMinutes.value = String(session.breakMin);
+
+    state.mode = session.mode === 'Awake' ? 'awake' : 'sleep';
+    resetTimer();
+    applyModeUI();
+    setStatus(`Loaded ${session.name}`);
+  }
+
+  function deleteSession(index) {
+    const sessions = getSavedSessions();
+    if (index < 0 || index >= sessions.length) return;
+    sessions.splice(index, 1);
+    setSavedSessions(sessions);
+    renderSavedSessions();
+    setStatus('Session deleted');
+  }
+
+  function saveSession() {
+    const sessions = getSavedSessions();
+
+    if (sessions.length >= getSessionLimit()) {
+      window.Paywall?.open?.();
+      setStatus('Free mode allows only 1 saved session.');
+      return;
+    }
+
+    const totalSeconds = Number(els.sessionPreset?.value || 28800);
+    const session = {
+      name: `Session ${sessions.length + 1}`,
+      mode: state.mode === 'sleep' ? 'Sleep' : 'Awake',
+      totalSeconds,
+      totalLabel: formatTime(totalSeconds),
+      study: Number(els.studyMinutes?.value || 55),
+      breakMin: Number(els.breakMinutes?.value || 5),
+    };
+
+    sessions.push(session);
+    setSavedSessions(sessions);
+
+    state.duration = totalSeconds;
+    state.remaining = totalSeconds;
+    state.isPaused = false;
+
+    updateTimerUI();
+    updateStats();
+    renderSavedSessions();
+
+    if (els.pauseSessionBtn) els.pauseSessionBtn.textContent = 'Pause';
+    setStatus(`${session.name} saved.`);
+  }
+
+  function initInstallPrompt() {
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      state.deferredPrompt = event;
+      if (els.installBtn) els.installBtn.disabled = false;
+    });
+
+    els.installBtn?.addEventListener('click', async () => {
+      window.Paywall?.requirePremium?.(async () => {
+        if (!state.deferredPrompt) {
+          setStatus('Open this in Android Chrome to install if supported.');
+          return;
+        }
+
+        state.deferredPrompt.prompt();
+        await state.deferredPrompt.userChoice;
+        state.deferredPrompt = null;
+      });
+    });
+  }
+
+  function registerSW() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+  }
+
+  function bindEvents() {
+    els.startSessionBtn?.addEventListener('click', startTimer);
+    els.pauseSessionBtn?.addEventListener('click', pauseOrResumeTimer);
+    els.resetSessionBtn?.addEventListener('click', resetTimer);
+    els.toggleModeBtn?.addEventListener('click', toggleMode);
+    els.playRainBtn?.addEventListener('click', toggleRain);
+    els.playAlarmBtn?.addEventListener('click', testAlarm);
+    els.readTextBtn?.addEventListener('click', speakText);
+    els.stopReadBtn?.addEventListener('click', stopReading);
+    els.saveSessionBtn?.addEventListener('click', saveSession);
+    els.openPaywallBtn?.addEventListener('click', () => window.Paywall?.open?.());
+
+    els.documentUpload?.addEventListener('change', handleDocumentSelect);
+    els.parseFileBtn?.addEventListener('click', parseChosenFileToStudyText);
+
+    els.audioUpload?.addEventListener('change', handleAudioUpload);
+    els.playFileBtn?.addEventListener('click', playSelectedFile);
+    els.stopMediaBtn?.addEventListener('click', () => {
+      stopMediaPlayback();
+      setStatus('Media stopped');
+    });
+
+    els.sessionPreset?.addEventListener('change', resetTimer);
+    els.studyMinutes?.addEventListener('input', updateStats);
+    els.breakMinutes?.addEventListener('input', updateStats);
+
+    window.addEventListener('sleepystudy:premium-change', () => {
+      updateLimitsUI();
+      renderLibrary();
+      renderSavedSessions();
+    });
+
+    if ('speechSynthesis' in window) {
+      populateVoices();
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    }
+  }
+
+  function init() {
+    bindEvents();
+    updateLimitsUI();
+    updateStats();
+    updateTimerUI();
+    applyModeUI();
+    renderLibrary();
+    renderSavedSessions();
+    initInstallPrompt();
+    registerSW();
+    setStatus('Ready to begin');
+  }
+
+  init();
+})();
