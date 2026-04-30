@@ -1,3 +1,4 @@
+import { runJacai } from "./jacaiNative.js";
 import { Agent, run, tool } from "@openai/agents";
 import { z } from "zod";
 import {
@@ -8,6 +9,7 @@ import {
   smmQueueForPublish,
   smmRunTagX,
 } from "./smmNativeTools.js";
+
 
 const getDraftTool = tool({
   name: "get_draft_details",
@@ -89,6 +91,18 @@ const sharepackTool = tool({
   },
 });
 
+const jacaiWorkflowTool = tool({
+  name: "jacai_native_workflow",
+  description:
+    "Run JacAI native workflow for combined image, video, TagX, sharepack, publish, latest, and existing draft tasks.",
+  parameters: z.object({
+    message: z.string(),
+  }),
+  async execute(input) {
+    return runJacai(input.message);
+  },
+});
+
 const publishAgent = new Agent({
   name: "Publish Agent",
   model: "gpt-5.4",
@@ -96,7 +110,7 @@ const publishAgent = new Agent({
 You are the Publish Agent.
 
 Publishing rules:
-- For combined workflows like "create image, run TagX, sharepack, publish", prefer smm_native_publish_workflow.
+-For combined workflows involving image, video, TagX, sharepack, and publish, prefer jacai_native_workflow because it updates media_json and publishes with attached assets correctly.
 - Use get_draft_details when user references a draft ID.
 - Use queue_for_publish before publish_to_static_site unless user says already queued.
 - Use publish_to_static_site only after user confirms publish, unless the user explicitly commands publish.
@@ -106,6 +120,7 @@ Publishing rules:
 - Do not fake success.
 `,
   tools: [
+    jacaiWorkflowTool,
     getDraftTool,
     nativePublishWorkflowTool,
     queuePublishTool,
