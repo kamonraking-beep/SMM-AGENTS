@@ -2,31 +2,34 @@
 
 import { useState } from "react";
 
-type ChatMessage = {
+type Message = {
   role: "user" | "assistant";
   content: string;
 };
 
+const apiBaseUrl =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://smm-agents-check-your-job.onrender.com";
+
 export function ChatShell() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isSending, setIsSending] = useState(false);
+  const [working, setWorking] = useState(false);
 
   async function sendMessage() {
     const text = input.trim();
-    if (!text || isSending) return;
+    if (!text || working) return;
 
-    const nextMessages: ChatMessage[] = [
+    const nextMessages: Message[] = [
       ...messages,
       { role: "user", content: text },
     ];
 
     setMessages(nextMessages);
     setInput("");
-    setIsSending(true);
+    setWorking(true);
 
     try {
-      const response = await fetch("https://smm-agents.onrender.com/agent/chat", {
+      const response = await fetch(`${apiBaseUrl}/agent/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -37,7 +40,11 @@ export function ChatShell() {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        ok?: boolean;
+        reply?: string;
+        error?: string;
+      };
 
       if (!response.ok) {
         throw new Error(data.error ?? "Agent request failed");
@@ -47,7 +54,7 @@ export function ChatShell() {
         ...nextMessages,
         {
           role: "assistant",
-          content: data.reply,
+          content: data.reply ?? "No response returned.",
         },
       ]);
     } catch (error) {
@@ -56,13 +63,11 @@ export function ChatShell() {
         {
           role: "assistant",
           content:
-            error instanceof Error
-              ? `Error: ${error.message}`
-              : "Unknown error",
+            error instanceof Error ? `Error: ${error.message}` : "Unknown error",
         },
       ]);
     } finally {
-      setIsSending(false);
+      setWorking(false);
     }
   }
 
@@ -75,7 +80,7 @@ export function ChatShell() {
           </div>
         ) : (
           messages.map((message, index) => (
-            <div key={index} className={`message ${message.role}`}>
+            <div className={`message ${message.role}`} key={index}>
               <strong>{message.role === "user" ? "You" : "Agent"}</strong>
               <p>{message.content}</p>
             </div>
@@ -87,18 +92,19 @@ export function ChatShell() {
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Create an Instagram post for Studio1Live..."
+          placeholder="Create a post for this brand..."
           rows={3}
-          disabled={isSending}
+          disabled={working}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              void sendMessage();
+              sendMessage();
             }
           }}
         />
-        <button onClick={sendMessage} disabled={isSending || !input.trim()}>
-          {isSending ? "Working..." : "Send"}
+
+        <button onClick={sendMessage} disabled={working || !input.trim()}>
+          {working ? "Working..." : "Send"}
         </button>
       </div>
     </section>
