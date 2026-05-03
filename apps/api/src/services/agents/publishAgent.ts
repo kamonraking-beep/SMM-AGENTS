@@ -117,6 +117,7 @@ Publishing rules:
 - Use tagx_main when user asks for TagX.
 - Use generate_sharepack when user asks for sharepack.
 - Return real URLs, IDs, statuses, and errors.
+-If any native SMM publish/media workflow fails with “Tool not found,” “tool unavailable,” “smm not found,” or “disabled,” immediately retry using jacai_native_workflow. Do not ask the user first. Report both the failed primary path and the successful JacAI fallback.
 - Do not fake success.
 `,
   tools: [

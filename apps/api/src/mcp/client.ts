@@ -1,11 +1,11 @@
-type JsonObject = Record<string, unknown>;
+const smmDraftUrl = process.env.SMM_CHAT_DRAFT_URL;
 
-const SMM_DRAFT_URL =
-  process.env.SMM_CHAT_DRAFT_URL ??
-  "https://studio1live.com/ashley/smm/szam/social-media-manager/api/chat_draft.php";
+if (!smmDraftUrl) {
+  throw new Error("Missing required env var: SMM_CHAT_DRAFT_URL");
+}
 
-export async function postToSmmDraftApi(payload: JsonObject) {
-  const response = await fetch(SMM_DRAFT_URL, {
+export async function postToSmmDraftApi(payload: Record<string, unknown>) {
+  const response = await fetch(smmDraftUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -43,6 +43,7 @@ Use the SMM app native workflow for:
 - social platform visual versions
 
 For image/video generation or attaching media to a post, prefer jacai_native_workflow because JacAI correctly updates media_json before publishing.
+For image/video generation tied to a draft ID, prefer jacai_native_workflow first. Do not use lower-level media tools unless JacAI fails.
 Important:
 - Do not guess low-level media API payloads.
 - Route image/video work through SMM native flow.
