@@ -1,10 +1,10 @@
-const smmDraftUrl = process.env.SMM_CHAT_DRAFT_URL;
-
-if (!smmDraftUrl) {
-  throw new Error("Missing required env var: SMM_CHAT_DRAFT_URL");
-}
-
 export async function postToSmmDraftApi(payload: Record<string, unknown>) {
+  const smmDraftUrl = process.env.SMM_CHAT_DRAFT_URL;
+
+  if (!smmDraftUrl) {
+    throw new Error("Missing required env var: SMM_CHAT_DRAFT_URL");
+  }
+
   const response = await fetch(smmDraftUrl, {
     method: "POST",
     headers: {
