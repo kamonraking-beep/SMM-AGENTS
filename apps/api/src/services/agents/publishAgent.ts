@@ -2,13 +2,25 @@ import { runJacai } from "./jacaiNative.js";
 import { Agent, run, tool } from "@openai/agents";
 import { z } from "zod";
 import {
-  smmGenerateSharepack,
+ smmGenerateSharepack,
   smmGetDraftDetails,
+  smmListDrafts,
   smmNativeWorkflow,
   smmPublishToStaticSite,
   smmQueueForPublish,
   smmRunTagX,
 } from "./smmNativeTools.js";
+
+const listDraftsTool = tool({
+  name: "get_drafts",
+  description: "Get recent drafts from the SMM system.",
+  parameters: z.object({
+    limit: z.number(),
+  }),
+  async execute(input) {
+    return smmListDrafts(input.limit || 5);
+  },
+});
 
 
 const getDraftTool = tool({
@@ -110,6 +122,11 @@ const publishAgent = new Agent({
 You are the Publish Agent.
 
 Publishing rules:
+- If the user says publish, post, go live, send live, or push live without naming a site, use the SMM app's default site.
+- Do not ask which site unless the user explicitly asks to choose from multiple sites.
+- If no draft ID is given, call get_drafts and use the latest draft.
+- For combined workflows involving image, video, TagX, sharepack, and publish, prefer jacai_native_workflow.
+- When using JacAI, preserve the user's publish request exactly and let SMM/JacAI use the configured default site.
 -For combined workflows involving image, video, TagX, sharepack, and publish, prefer jacai_native_workflow because it updates media_json and publishes with attached assets correctly.
 - Use get_draft_details when user references a draft ID.
 - Use queue_for_publish before publish_to_static_site unless user says already queued.
@@ -122,6 +139,7 @@ Publishing rules:
 `,
   tools: [
     jacaiWorkflowTool,
+    listDraftsTool,
     getDraftTool,
     nativePublishWorkflowTool,
     queuePublishTool,
